@@ -30,7 +30,7 @@
 /*
  *  Changes from Qualcomm Innovation Center are provided under the following license:
  *
- *  Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ *  Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -180,6 +180,12 @@ class ClientImpl : public ClientInterface {
   virtual int SetSkewVsync(uint32_t disp_id, uint32_t skew_vsync_val);
   virtual int SetActiveOnDisplayArea(uint64_t physical_disp_id, const Rect active_rect,
                                      const Rect placement_rect);
+  virtual int tunnellingInit();
+  virtual int dequeueTunnelledBuffer(const native_handle_t* buffer_handle,
+                                     const native_handle_t* release_fence_handle);
+  virtual int queueTunnelledBuffer(const native_handle_t* buffer_handle,
+                                   const native_handle_t* acquire_fence_handle);
+  virtual int tunnellingDeinit();
 
  private:
   android::sp<IDisplayConfig> display_config_ = nullptr;
