@@ -64,6 +64,7 @@
 #define QTI_RGB_DATA_ADDRESS 10023
 #define QTI_COLORSPACE 10024
 #define QTI_YUV_PLANE_INFO 10025
+#define QTI_CRC_BUFFER 10026
 
 // Used to indicate to framework that internal definitions are used instead
 #define COMPRESSION_QTI_UBWC 20001
@@ -73,6 +74,9 @@
 #define PLANE_COMPONENT_TYPE_META 20004
 
 #define MAX_NAME_LEN 256
+
+#define CRC_BUFFER_SIZE 64
+#define CRC_BUFFER_SIZE_IN_BYTES (CRC_BUFFER_SIZE * sizeof(uint32_t))
 
 // GRAPHICS_METADATA
 #define GRAPHICS_METADATA_SIZE 4096
@@ -188,9 +192,9 @@ struct qti_ycbcr {
 #define HAL_CSC_ITU_R_601 0
 #define HAL_CSC_ITU_R_601_FR 1
 #define HAL_CSC_ITU_R_709 2
-#define HAL_CSC_ITU_R_709_FR 3
-#define HAL_CSC_ITU_R_2020 4
-#define HAL_CSC_ITU_R_2020_FR 5
+#define HAL_CSC_ITU_R_2020 3
+#define HAL_CSC_ITU_R_2020_FR 4
+#define HAL_CSC_ITU_R_709_FR 5
 
 #define METADATA_SET_SIZE 512
 

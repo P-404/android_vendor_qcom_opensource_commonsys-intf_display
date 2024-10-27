@@ -27,6 +27,43 @@
 * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
+/*
+* Changes from Qualcomm Innovation Center are provided under the following license:
+*
+* Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+*
+* Redistribution and use in source and binary forms, with or without
+* modification, are permitted (subject to the limitations in the
+* disclaimer below) provided that the following conditions are met:
+*
+*    * Redistributions of source code must retain the above copyright
+*      notice, this list of conditions and the following disclaimer.
+*
+*    * Redistributions in binary form must reproduce the above
+*      copyright notice, this list of conditions and the following
+*      disclaimer in the documentation and/or other materials provided
+*      with the distribution.
+*
+*    * Neither the name of Qualcomm Innovation Center, Inc. nor the
+*      names of its contributors may be used to endorse or promote
+*      products derived from this software without specific prior
+*      written permission.
+*
+* NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE
+* GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT
+* HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
+* WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+* MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+* IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
+* ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+* DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+* GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+* INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+* IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+* OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+* IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/
+
 #include <cinttypes>
 #include <string>
 #include <vector>
@@ -46,13 +83,13 @@ int DeviceImpl::CreateInstance(ClientContext *intf) {
       return -1;
     }
 
+    device_obj_->intf_ = intf;
     android::status_t status = device_obj_->IDisplayConfig::registerAsService();
     // Unable to start Display Config 2.0 service. Fail Init.
     if (status != android::OK) {
       device_obj_ = nullptr;
       return -1;
     }
-    device_obj_->intf_ = intf;
   }
 
   return 0;
@@ -110,6 +147,7 @@ Return<void> DeviceImpl::registerClient(const hidl_string &client_name,
 
 void DeviceImpl::serviceDied(uint64_t client_handle,
                              const android::wp<::android::hidl::base::V1_0::IBase>& callback) {
+  std::lock_guard<std::shared_mutex> exclusive_lock(shared_mutex_);
   std::lock_guard<std::recursive_mutex> lock(death_service_mutex_);
   auto itr = display_config_map_.find(client_handle);
   std::shared_ptr<DeviceClientContext> client = itr->second;
@@ -916,24 +954,136 @@ void DeviceImpl::DeviceClientContext::ParseSetWiderModePreference(const ByteStre
   _hidl_cb(error, {}, {});
 }
 
+void DeviceImpl::DeviceClientContext::ParseGetFSCRGBOrder(const ByteStream &input_params,
+                                                          perform_cb _hidl_cb) {
+  const DisplayType *dpy;
+  ByteStream output_params;
+
+  const uint8_t *data = input_params.data();
+  dpy = reinterpret_cast<const DisplayType*>(data);
+
+  RGBOrder fsc_rgb_color_order = DisplayConfig::RGBOrder::kFSCUnknown;
+  int32_t error = intf_->GetFSCRGBOrder(*dpy, &fsc_rgb_color_order);
+  output_params.setToExternal(reinterpret_cast<uint8_t*>(&fsc_rgb_color_order), sizeof(RGBOrder));
+
+  _hidl_cb(error, output_params, {});
+}
+
+void DeviceImpl::DeviceClientContext::ParseEnableCAC(const ByteStream &input_params,
+                                                     perform_cb _hidl_cb) {
+  struct EnableCACParams enable_cac_data = {};
+
+  const uint8_t *data = input_params.data();
+  if (data) {
+    enable_cac_data = *reinterpret_cast<const EnableCACParams*>(data);
+  }
+  int32_t error = intf_->EnableCAC(enable_cac_data.disp_id, enable_cac_data.enable,
+                                   enable_cac_data.red, enable_cac_data.green,
+                                   enable_cac_data.blue);
+  _hidl_cb(error, {}, {});
+}
+
+void DeviceImpl::DeviceClientContext::ParseSetCacEyeConfig(const ByteStream &input_params,
+                                                           perform_cb _hidl_cb) {
+  const struct CacEyeConfigParams *cac_eye_config_data = nullptr;
+
+  const uint8_t *data = input_params.data();
+  if (data) {
+    cac_eye_config_data = reinterpret_cast<const CacEyeConfigParams*>(data);
+    int32_t error = intf_->SetCacEyeConfig(cac_eye_config_data->disp_id, cac_eye_config_data->left,
+                                           cac_eye_config_data->right);
+    _hidl_cb(error, {}, {});
+  } else {
+    _hidl_cb(-EINVAL, {}, {});
+  }
+}
+
+void DeviceImpl::DeviceClientContext::ParseSetSkewVsync(const ByteStream &input_params,
+                                                        perform_cb _hidl_cb) {
+  struct SkewVsyncParams skew_vsync_data = {};
+
+  const uint8_t *data = input_params.data();
+  if (data) {
+    skew_vsync_data = *reinterpret_cast<const SkewVsyncParams*>(data);
+  }
+  int32_t error = intf_->SetSkewVsync(skew_vsync_data.disp_id, skew_vsync_data.skew_vsync_val);
+  _hidl_cb(error, {}, {});
+}
+
+void DeviceImpl::DeviceClientContext::ParseSetActiveOnDisplayArea(const ByteStream &input_params,
+                                                                  perform_cb _hidl_cb) {
+  struct ActiveOnDisplayAreaParams active_ondisplay_area_data = {};
+
+  const uint8_t *data = input_params.data();
+  if (data) {
+    active_ondisplay_area_data = *reinterpret_cast<const ActiveOnDisplayAreaParams*>(data);
+  }
+  int32_t error = intf_->SetActiveOnDisplayArea(active_ondisplay_area_data.physical_disp_id,
+                                                active_ondisplay_area_data.active_rect,
+                                                active_ondisplay_area_data.placement_rect);
+  _hidl_cb(error, {}, {});
+}
+
+void DeviceImpl::DeviceClientContext::ParseTunnellingInit(perform_cb _hidl_cb) {
+  int32_t error = intf_->tunnellingInit();
+  _hidl_cb(error, {}, {});
+}
+
+void DeviceImpl::DeviceClientContext::ParsequeueTunnelledBuffer(uint64_t clientHandle,
+                                                                const ByteStream &input_params,
+                                                                const HandleStream &input_handles,
+                                                                perform_cb _hidl_cb) {
+  const uint8_t *data = input_params.data();
+  const native_handle fence = reinterpret_cast<const native_handle& >(data);
+  const hidl_handle buffer = input_handles[0];
+
+  int32_t error = intf_->queueTunnelledBuffer(buffer.getNativeHandle(),&fence);
+
+  _hidl_cb(error, {}, {});
+}
+
+void DeviceImpl::DeviceClientContext::ParsedequeueTunnelledBuffer(uint64_t clientHandle,
+                                                                  const ByteStream &input_params,
+                                                                  const HandleStream &input_handles,
+                                                                  perform_cb _hidl_cb) {
+  const uint8_t *data = input_params.data();
+  const native_handle fence = reinterpret_cast<const native_handle&>(data);
+  const hidl_handle buffer = input_handles[0];
+
+  int32_t error = intf_->dequeueTunnelledBuffer(buffer.getNativeHandle(),&fence);
+
+  _hidl_cb(error, {}, {});
+}
+
+void DeviceImpl::DeviceClientContext::ParsetunnellingDeinit(perform_cb _hidl_cb) {
+  int32_t error = intf_->tunnellingDeinit();
+  _hidl_cb(error, {}, {});
+}
+
 Return<void> DeviceImpl::perform(uint64_t client_handle, uint32_t op_code,
                                  const ByteStream &input_params, const HandleStream &input_handles,
                                  perform_cb _hidl_cb) {
+  std::shared_lock<std::shared_mutex> shared_lock(shared_mutex_);
   int32_t error = 0;
-  std::lock_guard<std::recursive_mutex> lock(death_service_mutex_);
-  auto itr = display_config_map_.find(client_handle);
-  if (itr == display_config_map_.end()) {
-    error = -EINVAL;
-    _hidl_cb(error, {}, {});
-    return Void();
+  std::shared_ptr<DeviceClientContext> client = nullptr;
+
+  {
+    std::lock_guard<std::recursive_mutex> lock(death_service_mutex_);
+    auto itr = display_config_map_.find(client_handle);
+    if (itr == display_config_map_.end()) {
+      error = -EINVAL;
+      _hidl_cb(error, {}, {});
+      return Void();
+    }
+    client = itr->second;
   }
 
-  std::shared_ptr<DeviceClientContext> client = itr->second;
   if (!client) {
     error = -EINVAL;
     _hidl_cb(error, {}, {});
      return Void();
   }
+
   switch (op_code) {
     case kIsDisplayConnected:
       client->ParseIsDisplayConnected(input_params, _hidl_cb);
@@ -1099,6 +1249,33 @@ Return<void> DeviceImpl::perform(uint64_t client_handle, uint32_t op_code,
       break;
     case kSetWiderModePref:
       client->ParseSetWiderModePreference(input_params, _hidl_cb);
+      break;
+    case kGetFSCRGBOrder:
+      client->ParseGetFSCRGBOrder(input_params, _hidl_cb);
+      break;
+    case kEnableCAC:
+      client->ParseEnableCAC(input_params, _hidl_cb);
+      break;
+    case kSetCacEyeConfig:
+      client->ParseSetCacEyeConfig(input_params, _hidl_cb);
+      break;
+    case kSetSkewVsync:
+      client->ParseSetSkewVsync(input_params, _hidl_cb);
+      break;
+    case kSetActiveOnDisplayArea:
+      client->ParseSetActiveOnDisplayArea(input_params, _hidl_cb);
+      break;
+    case kTunnellingInit:
+      client->ParseTunnellingInit(_hidl_cb);
+      break;
+    case kQueueTunneledBuffer:
+      client->ParsequeueTunnelledBuffer(client_handle, input_params, input_handles, _hidl_cb);
+      break;
+    case kDequeueTunneledBuffer:
+      client->ParsedequeueTunnelledBuffer(client_handle, input_params,input_handles, _hidl_cb);
+      break;
+    case kTunnellingDeinit :
+      client->ParsetunnellingDeinit(_hidl_cb);
       break;
     default:
       _hidl_cb(-EINVAL, {}, {});
